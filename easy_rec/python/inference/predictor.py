@@ -18,10 +18,12 @@ from tensorflow.python.platform import gfile
 from tensorflow.python.saved_model import constants
 from tensorflow.python.saved_model import signature_constants
 
+from easy_rec.python.protos.dataset_pb2 import DatasetConfig
 from easy_rec.python.utils.config_util import get_configs_from_pipeline_file
 from easy_rec.python.utils.input_utils import get_type_defaults
 from easy_rec.python.utils.load_class import get_register_class_meta
 from easy_rec.python.utils.check_utils import check_split
+from easy_rec.python.utils.hive_utils import *
 
 if tf.__version__ >= '2.0':
   tf = tf.compat.v1
@@ -357,6 +359,18 @@ class Predictor(PredictorInterface):
       default_val = defaults[col_type]
     return default_val
 
+  def get_tf_type(self, field_type):
+    type_map = {
+      DatasetConfig.INT32: tf.int32,
+      DatasetConfig.INT64: tf.int64,
+      DatasetConfig.STRING: tf.string,
+      DatasetConfig.BOOL: tf.bool,
+      DatasetConfig.FLOAT: tf.float32,
+      DatasetConfig.DOUBLE: tf.double
+    }
+    assert field_type in type_map, 'invalid type: %s' % field_type
+    return type_map[field_type]
+
   def _parse_line(self, line):
     pass
   def _get_dataset(self, input_path, num_parallel_calls, batch_size, slice_num, slice_id):
@@ -632,3 +646,69 @@ class ODPSPredictor(Predictor):
   @property
   def out_of_range_exception(self):
     return tf.python_io.OutOfRangeException
+
+class HivePredictor(Predictor):
+
+  def __init__(self,data_config, feature_config, input_path, model_path, profiling_file=None, output_sep=chr(1)):
+    super(HivePredictor, self).__init__(model_path, profiling_file)
+
+    #self._pipeline_config = pipeline_config
+    self._data_config = data_config
+    self._feature_config = feature_config
+    self._hive_config = input_path
+    self._eval_batch_size = data_config.eval_batch_size
+    self._fetch_size = self._hive_config.fetch_size
+
+    self._output_sep = output_sep
+
+    self._record_defaults = [
+      self._get_defaults(col_name) for col_name in self._input_fields
+    ]
+
+  def _parse_line(self, *fields):
+    fields = list(fields)
+    field_dict = {self._input_fields[i]: fields[i] for i in range(len(fields))}
+    return field_dict
+
+  def _get_dataset(self, input_path, num_parallel_calls, batch_size, slice_num, slice_id):
+
+    this_batch_size = HiveUtils(data_config=self._data_config,
+                                feature_config=self._feature_config,
+                                input_path=self._hive_config,
+                                this_batch_size='')._get_batch_size(tf.estimator.ModeKeys.PREDICT)
+
+    _hive_read = HiveUtils(data_config=self._data_config,
+                           feature_config=self._feature_config,
+                           input_path=self._hive_config,
+                           this_batch_size=this_batch_size)._hive_read
+
+    _input_field_types = [x.input_type for x in self._data_config.input_fields]
+
+    list_type = [self.get_tf_type(x) for x in _input_field_types]
+    list_type = tuple(list_type)
+    list_shapes = [tf.TensorShape([None]) for x in range(0, len(list_type))]
+    list_shapes = tuple(list_shapes)
+
+    dataset = tf.data.Dataset.from_generator(
+      _hive_read, output_types=list_type, output_shapes=list_shapes)
+
+    #dataset = dataset.batch(batch_size)
+    #dataset = dataset.prefetch(buffer_size=64)
+    return dataset
+
+  def _get_writer(self, output_path, slice_id):
+    if not gfile.Exists(output_path):
+      gfile.MakeDirs(output_path)
+    res_path = os.path.join(output_path, 'slice_%d.csv' % slice_id)
+    table_writer = gfile.GFile(res_path, 'w')
+    table_writer.write(self._output_sep.join(self._output_cols + self._reserved_cols) + '\n')
+    return table_writer
+
+  def _write_line(self, table_writer, outputs):
+    outputs = '\n'.join(
+      [self._output_sep.join([str(i) for i in output]) for output in outputs])
+    table_writer.write(outputs + '\n')
+
+  @property
+  def out_of_range_exception(self):
+    return tf.errors.OutOfRangeError

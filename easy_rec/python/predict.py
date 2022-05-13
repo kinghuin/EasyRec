@@ -8,8 +8,8 @@ import os
 import tensorflow as tf
 from tensorflow.python.lib.io import file_io
 
-from easy_rec.python.utils import pai_util
-from easy_rec.python.inference.predictor import CSVPredictor, ODPSPredictor
+from easy_rec.python.utils import pai_util,config_util
+from easy_rec.python.inference.predictor import CSVPredictor, ODPSPredictor, HivePredictor
 from easy_rec.python.main import predict
 
 if tf.__version__ >= '2.0':
@@ -54,9 +54,19 @@ def main(argv):
 
   if FLAGS.saved_model_dir:
     logging.info('Predict by saved_model.')
-    predictor = CSVPredictor(FLAGS.saved_model_dir,
-                         input_sep=FLAGS.input_sep,
-                         output_sep=FLAGS.output_sep)
+    pipeline_config = config_util.get_configs_from_pipeline_file(
+        FLAGS.pipeline_config_path, False)
+    if pipeline_config.WhichOneof('eval_path') == 'hive_eval_input':
+        pipeline_config.hive_train_input.table_name = FLAGS.eval_input_path
+        data_config = pipeline_config.data_config
+        feature_configs = config_util.get_compatible_feature_configs(pipeline_config)
+        input_path = pipeline_config.hive_eval_input
+        predictor = HivePredictor(data_config, feature_configs, input_path ,FLAGS.saved_model_dir,
+                                  output_sep=FLAGS.output_sep)
+    else:
+        predictor = CSVPredictor(FLAGS.saved_model_dir,
+                                 input_sep=FLAGS.input_sep,
+                                 output_sep=FLAGS.output_sep)
     logging.info('input_path = %s, output_path = %s' %
                  (FLAGS.input_path, FLAGS.output_path))
     if 'TF_CONFIG' in os.environ:
