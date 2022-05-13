@@ -57,7 +57,7 @@ def main(argv):
     pipeline_config = config_util.get_configs_from_pipeline_file(
         FLAGS.pipeline_config_path, False)
     if pipeline_config.WhichOneof('eval_path') == 'hive_eval_input':
-        pipeline_config.hive_train_input.table_name = FLAGS.eval_input_path
+        pipeline_config.hive_eval_input.table_name = FLAGS.input_path
         data_config = pipeline_config.data_config
         feature_configs = config_util.get_compatible_feature_configs(pipeline_config)
         input_path = pipeline_config.hive_eval_input
