@@ -65,7 +65,7 @@ def main(argv):
       logging.info('update model_dir to %s' % pipeline_config.model_dir)
     if FLAGS.train_input_path:
       if pipeline_config.WhichOneof('train_path') == 'hive_train_input':
-        pipeline_config.hive_train_input.table_name = FLAGS.train_input_path
+        pipeline_config.hive_train_input.table_name = FLAGS.train_input_path[0]
       else:
         pipeline_config.train_input_path = ','.join(FLAGS.train_input_path)
       #pipeline_config.train_input_path = ','.join(FLAGS.train_input_path)
@@ -73,7 +73,7 @@ def main(argv):
                    pipeline_config.train_input_path)
     if FLAGS.eval_input_path:
       if pipeline_config.WhichOneof('eval_path') == 'hive_eval_input':
-        pipeline_config.hive_train_input.table_name = FLAGS.eval_input_path
+        pipeline_config.hive_train_input.table_name = FLAGS.eval_input_path[0]
       else:
         pipeline_config.eval_input_path = ','.join(FLAGS.eval_input_path)
       #pipeline_config.eval_input_path = ','.join(FLAGS.eval_input_path)
