@@ -363,10 +363,15 @@ def evaluate(pipeline_config,
     fg_util.load_fg_json_to_config(pipeline_config)
   if eval_data_path is not None:
     logging.info('Evaluating on data: %s' % eval_data_path)
+    if pipeline_config.WhichOneof('eval_path') == 'hive_eval_input':
+      pipeline_config.hive_eval_input.table_name = eval_data_path[0]
+  else:
+    #pipeline_config.eval_input_path = ','.join(FLAGS.eval_input_path)
     if isinstance(eval_data_path, list):
       pipeline_config.eval_input_path = ','.join(eval_data_path)
     else:
       pipeline_config.eval_input_path = eval_data_path
+
   train_config = pipeline_config.train_config
   eval_data = _get_input_object_by_name(pipeline_config, 'eval')
 
@@ -483,6 +488,10 @@ def distribute_evaluate(pipeline_config,
   pipeline_config = config_util.get_configs_from_pipeline_file(pipeline_config)
   if eval_data_path is not None:
     logging.info('Evaluating on data: %s' % eval_data_path)
+    if pipeline_config.WhichOneof('eval_path') == 'hive_eval_input':
+      pipeline_config.hive_eval_input.table_name = eval_data_path[0]
+  else:
+    #pipeline_config.eval_input_path = ','.join(FLAGS.eval_input_path)
     if isinstance(eval_data_path, list):
       pipeline_config.eval_input_path = ','.join(eval_data_path)
     else:
